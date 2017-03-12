@@ -1,16 +1,19 @@
 package com.example.administrator.game;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.view.MotionEvent;
 import android.view.TextureView;
 import android.view.View;
 
 import java.util.ArrayList;
-
 /**
  * Created by Administrator on 2017-03-11.
  */
@@ -21,14 +24,23 @@ public class GameView extends TextureView implements TextureView.SurfaceTextureL
     volatile private float mTouchedX;
     volatile private float mTouchedY;
 
-    public GameView(Context context){
+    public GameView(final Context context){
         super(context);
         setSurfaceTextureListener(this);
         setOnTouchListener(this);
+        mHandler = new Handler(){
+            public void handleMessage(Message message){
+                Intent intent = new Intent(context,clearActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NO_HISTORY);
+                intent.putExtras(message.getData());
+                context.startActivity(intent);
+            }
+        };
     }
 
     private Pad mPad;
     private ArrayList<DrawableItem> mItemList;
+    private ArrayList<Block> mBlockList;
 
     private float mPadHalfWidth;
     private Ball mBall;
@@ -40,26 +52,44 @@ public class GameView extends TextureView implements TextureView.SurfaceTextureL
     static final int BLOCK_COUNT=100;
 
     private int mLife;
+    private long mGameStarTime;
+    private Handler mHandler;
 
     public void readyObjects(int width, int height){
         mBlockWidth = width /10;
         mBlockHeight = height/20;
         mItemList = new ArrayList<DrawableItem>();
+        mBlockList = new ArrayList<Block>();
         mLife = 5;
         for(int i=0;i<BLOCK_COUNT;i++){
             float blockTop = i /10 * mBlockHeight;
             float blockLeft = i%10 * mBlockWidth;
             float blockBottom = blockTop+mBlockHeight;
             float blockRight = blockLeft+mBlockWidth;
-            mItemList.add(new Block(blockTop,blockLeft,blockBottom,blockRight));
+            //mItemList.add(new Block(blockTop,blockLeft,blockBottom,blockRight));
+            mBlockList.add(new Block(blockTop,blockLeft,blockBottom,blockRight));
         }
+        mItemList.addAll(mBlockList);
 
         mPad = new Pad(height * 0.8f , height * 0.85f);
         mItemList.add(mPad);
         mPadHalfWidth = width / 10;
         mBallRadius = width<height ? width/40: height/40;
-        mBall = new Ball(mBallRadius,width/2,height/2);
+
+        mBall = new Ball(mBallRadius,width/2,mPad.getTop()+10);
         mItemList.add(mBall);
+        mGameStarTime = System.currentTimeMillis();
+
+    }
+
+    private int getBlockCount(){
+        int count=0;
+        for(Block block : mBlockList){
+            if(block.isExist()){
+                count++;
+            }
+        }
+        return count;
     }
 
     private Block getBlock(float x, float y){
@@ -78,9 +108,6 @@ public class GameView extends TextureView implements TextureView.SurfaceTextureL
         mThread = new Thread(new Runnable(){
             public void run(){
                 Paint paint = new Paint();
-                paint.setColor(Color.RED);
-                paint.setStyle(Paint.Style.FILL);
-
 
                 while (true) {
                     long startTime = System.currentTimeMillis();
@@ -105,39 +132,57 @@ public class GameView extends TextureView implements TextureView.SurfaceTextureL
                         float ballBottom = mBall.getY() + mBallRadius;
                         float ballRight = mBall.getX() + mBallRadius;
 
+                        //볼과 화면의 충돌판정(좌우)
                         if (ballLeft < 0 && mBall.getSpeedX() < 0 || ballRight >= getWidth() && mBall.getSpeedX() > 0) {
                             mBall.setSpeedX(-mBall.getSpeedX());
                         }
 
                         if (ballTop > getHeight()) {
-                            if(mLife>0){
-                                mLife --;
+                            if (mLife > 0) {
+                                mLife--;
                                 mBall.reset();
-                           }
+                            } else {
+                                unlockCanvasAndPost(canvas);
+                                Message message = Message.obtain();
+                                Bundle bundle = new Bundle();
+                                bundle.putBoolean(clearActivity.EXTRA_IS_CLEAR, false);
+                                bundle.putInt(clearActivity.EXTRA_BLOCK_COUNT, getBlockCount());
+                                bundle.putLong(clearActivity.EXTRA_TIME, System.currentTimeMillis() - mGameStarTime);
+                                message.setData(bundle);
+                                mHandler.sendMessage(message);
+                                return;
+
+                            }
                         }
 
-                        //블록과 공의 충돌판정
+
+                        //블록과 공의 충돌판정(상)
                         Block leftBlock = getBlock(ballLeft,mBall.getY());
                         Block topBlock = getBlock(mBall.getX(),ballTop);
                         Block rightBlock = getBlock(ballRight,mBall.getY());
                         Block bottomBlock = getBlock(mBall.getX(),ballBottom);
+                        boolean isCollision = false;
                         if(leftBlock != null){
                             mBall.setSpeedX(-mBall.getSpeedX());
                             leftBlock.collision();
+                            isCollision = true;
                         }
                         if(topBlock != null){
                             mBall.setSpeedY(-mBall.getSpeedY());
                             topBlock.collision();
+                            isCollision = true;
                         }
                         if(rightBlock != null){
                             mBall.setSpeedX(-mBall.getSpeedX());
                             rightBlock.collision();
+                            isCollision = true;
                         }
                         if(bottomBlock != null){
                             mBall.setSpeedY(-mBall.getSpeedY());
                             bottomBlock.collision();
+                            isCollision = true;
                         }
-
+                        //블록과 패드의 충돌판정(하)
                         float padTop = mPad.getTop();
                         float ballSpeedY =mBall.getSpeedY();
 
@@ -159,6 +204,16 @@ public class GameView extends TextureView implements TextureView.SurfaceTextureL
                             item.draw(canvas, paint);
                         }
                         unlockCanvasAndPost(canvas);
+
+                        if(isCollision && getBlockCount()==0){
+                            Message message = Message.obtain();
+                            Bundle bundle = new Bundle();
+                            bundle.putBoolean(clearActivity.EXTRA_IS_CLEAR,false);
+                            bundle.putInt(clearActivity.EXTRA_BLOCK_COUNT, getBlockCount());
+                            bundle.putLong(clearActivity.EXTRA_TIME,System.currentTimeMillis()-mGameStarTime);
+                            message.setData(bundle);
+                            mHandler.sendMessage(message);
+                        }
                     }
                     long sleepTime = 16 - System.currentTimeMillis() + startTime;
                     if (sleepTime > 0) {
