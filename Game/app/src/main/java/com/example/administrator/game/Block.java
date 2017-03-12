@@ -3,6 +3,7 @@ package com.example.administrator.game;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.os.Bundle;
 
 /**
  * Created by Administrator on 2017-03-11.
@@ -54,5 +55,17 @@ public class Block implements DrawableItem {
             paint.setStrokeWidth(4f);
             canvas.drawRect(mLeft,mTop,mRight,mBottom,paint);
         }
+    }
+
+    private static final String KEY_HARD = "hard";
+    public Bundle save(){
+        Bundle outState = new Bundle();
+        outState.putInt(KEY_HARD,mHard);
+        return outState;
+    }
+
+    public void restore(Bundle inState){
+        mHard = inState.getInt(KEY_HARD);
+        mIsExist = mHard > 0;
     }
 }

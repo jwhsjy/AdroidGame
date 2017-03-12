@@ -1,16 +1,31 @@
 package com.example.administrator.game;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.ViewConfiguration;
+
+import java.lang.reflect.Field;
 
 public class GameActivity extends AppCompatActivity {
     private GameView mView;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mView = new GameView(this);
+        mView = new GameView(this, savedInstanceState);
+
+        try{
+            ViewConfiguration config = ViewConfiguration.get(this);
+            Field menuKeyField = ViewConfiguration.class.getDeclaredField("sHasPermanenMenkey");
+            if(menuKeyField!=null){
+                menuKeyField.setAccessible(true);
+                menuKeyField.setBoolean(config,false);
+            }
+        }catch (Exception ex){
+
+        }
         setContentView(mView);
 
     }
@@ -24,6 +39,11 @@ public class GameActivity extends AppCompatActivity {
         super.onPause();
         mView.stop();
 
+    }
+
+    public void onSaveInstanceState(Bundle outState){
+        super.onSaveInstanceState(outState);
+        mView.onSaveInstanceState(outState);
     }
 
     @Override
@@ -42,6 +62,8 @@ public class GameActivity extends AppCompatActivity {
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
+            Intent intent = new Intent(this,SettingsActivity.class);
+            startActivity(intent);
             return true;
         }
 
